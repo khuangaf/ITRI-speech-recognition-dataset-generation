@@ -1,0 +1,158 @@
+
+# coding: utf-8
+
+# In[9]:
+
+
+import pandas as pd
+import numpy as np
+import os
+import errno
+import json
+import pafy
+from pprint import pprint
+from pathlib import Path
+import getpass
+import datetime
+from googleapiclient.discovery import build
+import subprocess 
+from joblib import Parallel, delayed
+import argparse
+# arguments to be passed to build function
+
+DEVELOPER_KEY = 'AIzaSyAT6yaU6UFz7OnnyTWshvAZzEJVU4x3aus'
+YOUTUBE_API_SERVICE_NAME = "youtube"
+YOUTUBE_API_VERSION = "v3"
+
+
+# In[56]:
+
+
+# creating youtube resource object for interacting with api
+youtube = build(YOUTUBE_API_SERVICE_NAME,
+                YOUTUBE_API_VERSION,
+                developerKey=DEVELOPER_KEY)
+
+
+def get_youtube_video_url(video_id):
+    return "https://www.youtube.com/watch?v=" + video_id
+
+
+playlist_url = 'https://www.youtube.com/watch?v=5rf8Z-b22Ac&list=PLtbJJuU1O8j_uECxOs1v2RIUFfLGEadHB'
+
+def get_playlist_id(name):
+    
+    #search for the first playlist result given a drama name
+    search_response = youtube.search().list(q=name,type="playlist",part="id",maxResults=1).execute()
+    result = search_response.get("items", [])
+    playlist_id = result[0]['id']['playlistId']
+    return playlist_id
+
+
+def get_video_ids(playlist_id):
+    
+    #search for all the videos given a playlist id
+    search_response = youtube.playlistItems().list(part='contentDetails',maxResults=50,playlistId=playlist_id).execute()
+    all_videos = search_response['items']
+    video_ids = []
+    for vid in all_videos:
+        video_id = vid['contentDetails']['videoId']
+        video_ids.append(video_id)
+    return video_ids
+
+
+
+def get_youtube_video_url(video_id):
+    return "https://www.youtube.com/watch?v=" + video_id
+
+
+def download_video(video_id, path="videos", verbose=True):
+    try:
+        # get video url
+        video_url = get_youtube_video_url(video_id)
+
+        try:
+            video = pafy.new(video_url)
+            # get best video format
+            best = video.getbest(preftype="mp4")
+            # download video
+            best.download(filepath=path + "/" + video_id + "." + best.extension,
+                          quiet=False)
+            # log
+            if verbose == True:
+                print("- {id} video downloaded.".format(id=video_id))
+
+            return True
+        except Exception as e:
+            print("- {exception}".format(exception=e))
+            print("- {id} video cannot be downloaded.".format(id=video_id))
+            return False
+    except Exception as e:
+        print('Failed to download video: {}'.format(e))
+        return False
+
+
+
+def download_audio(video_id, path="audios", verbose=True):
+    try:
+        # get video url
+        video_url = get_youtube_video_url(video_id)
+
+        try:
+            video = pafy.new(video_url)
+            # get best audio format
+            bestaudio = None
+            bestaudio = video.getbestaudio(preftype="ogg")
+            if bestaudio == None:
+                bestaudio = video.getbestaudio(preftype="m4a")
+            # download audio
+            bestaudio.download(filepath=path + "/" + video_id + "." + bestaudio.extension,
+                               quiet=False)
+            # log
+            if verbose:
+                print("- {id} audio downloaded.".format(id=video_id))
+
+            return True
+        except Exception as e:
+            print("- {exception}".format(exception=e))
+            print("- {id} audio cannot be downloaded.".format(id=video_id))
+            return False
+    except Exception as e:
+        print('Failed to download audio: {}'.format(e))
+        return False
+
+def read_drama_names():
+    with open('drama_list.txt', 'r') as f:
+        drama_list = [d.strip() for d in f.readlines()]
+    return drama_list
+
+def main():
+    parser = argparse.ArgumentParser("Script for downloading youtube video")
+    parser.add_argument("--thread-count", type=int, default=50)
+    args = parser.parse_args()
+    dramas = read_drama_names()
+    try: 
+        for drama in dramas:
+            playlist_id = get_playlist_id(drama)
+            video_ids = get_video_ids(playlist_id)
+            
+            # use multi-thread because downloading audios sometimes can be slow
+            parallel = Parallel(args.thread_count//2, backend="threading", verbose=10)
+            
+            #download video
+            parallel(delayed(download_video)(video_id) for video_id in video_ids)
+            
+            # use multi-thread because downloading audios sometimes can be slow
+            parallel = Parallel(args.thread_count, backend="threading", verbose=10)
+            
+            #download audio
+            parallel(delayed(download_audio)(video_id) for video_id in video_ids)
+        
+            
+    except Exception as e:
+        print('Failed to download videos: {}'.format(e))
+        
+          
+
+if __name__ == "__main__":
+    main()
