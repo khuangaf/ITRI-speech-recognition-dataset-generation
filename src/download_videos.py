@@ -24,6 +24,10 @@ DEVELOPER_KEY = 'AIzaSyAT6yaU6UFz7OnnyTWshvAZzEJVU4x3aus'
 YOUTUBE_API_SERVICE_NAME = "youtube"
 YOUTUBE_API_VERSION = "v3"
 
+VIDEOS_DIR = 'videos'
+AUDIOS_DIR = 'audios'
+os.makedirs(VIDEOS_DIR, exist_ok=True)
+os.makedirs(AUDIOS_DIR, exist_ok=True)
 
 # In[56]:
 

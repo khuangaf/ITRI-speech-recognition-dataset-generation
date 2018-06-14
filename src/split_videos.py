@@ -3,9 +3,13 @@ import subprocess
 from joblib import Parallel, delayed
 import argparse
 
+FRAMES_DIR = 'frames'
+
+os.makedirs(FRAMES_DIR, exist_ok=True)
 
 def video2frames(video_id, video_path = 'videos/', frame_path='frames/'):
     path_video = video_path + video_id + '.mp4'
+
     #sample_rate = 1 1/s
     try:
         cmd = f'ffmpeg -i {path_video} -r 1 {frame_path}/{video_id}-%07d.png'
