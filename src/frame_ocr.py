@@ -6,9 +6,7 @@ import json
 import requests
 import re
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import font_manager
 import io
 import pandas as pd
 
@@ -20,6 +18,7 @@ import operator
 import glob
 from tqdm import tqdm
 from time import gmtime
+import argparse
 
 ENDPOINT_URL = 'https://vision.googleapis.com/v1p1beta1/images:annotate'
 
@@ -27,14 +26,6 @@ ENDPOINT_URL = 'https://vision.googleapis.com/v1p1beta1/images:annotate'
 os.environ['GOOGLE_APPLICATION_CREDENTIALS']='/home/ashutosh/ITRI-Youtube-c9cd1c1d883d.json'
 client = vision.ImageAnnotatorClient()
 
-INPUT_DIR = 'crop_frames/'
-RESULTS_DIR = 'results/'
-# get current_time
-# y, m, d, h, m, s, _,_,_ = gmtime()
-RESULT_NAME = f'result.csv'
-
-makedirs(INPUT_DIR, exist_ok=True)
-makedirs(RESULTS_DIR, exist_ok=True)
 
 def get_max_value_from_dict(d):
     return max(d.items(), key=operator.itemgetter(1))[0]
@@ -54,6 +45,29 @@ def get_bounding_box_ratio(bounding_box):
 
     return float(x2 - x1) / float(y2-y1)
 
+def bounding_box_is_centered(bounding_box, fn):
+    '''
+    return False if the bounding box is not centered
+    '''
+    bottom_right = bounding_box.vertices[2]
+    top_left = bounding_box.vertices[0]
+    bottom_right = bounding_box.vertices[2]
+    
+    # get the center.x of the detected bounding box
+    x1 = top_left.x
+    x2 = bottom_right.x
+    
+    middle_bb = (x1 + x2) /2.0
+    img = cv2.imread(fn)
+    middle_img = img.shape[1] / 2.0
+    img_width = float(img.shape[1])
+#     print((middle_bb - middle_img) / img_width)
+    
+    # if the center of the bounding box is shifted
+    if abs(middle_bb - middle_img) / img_width > 0.02:
+        return False
+    else:
+        return True
 def get_best_prediction(fn):
     
     with io.open(fn, 'rb') as f:
@@ -62,27 +76,30 @@ def get_best_prediction(fn):
     image_context = vision.types.ImageContext(language_hints=['zh-TW'])
 
     response = client.document_text_detection(image=image,image_context=image_context)
-#     print(response)
+
     word_texts = {}
     for page in response.full_text_annotation.pages:
         for block in page.blocks:
             block_box_ratio =get_bounding_box_ratio(block.bounding_box)            
+
             # get rid of the weird text block
             if block_box_ratio < 3 or block_box_ratio > 18: 
                 continue
-                
-#             print(block_ratio)
+            if not bounding_box_is_centered(block.bounding_box, fn):
+                    continue 
+
             block_words = []
             for paragraph in block.paragraphs:
                 block_words.extend(paragraph.words)
-#                 print(u'Paragraph Confidence: {}\n'.format(
-#                     paragraph.confidence))
+
             
             block_symbols = []
             for word in block_words:
                 word_box_ratio = get_bounding_box_ratio(word.bounding_box)    
                 if word_box_ratio < 3 or word_box_ratio > 18: 
                     continue
+                if not bounding_box_is_centered(block.bounding_box, fn):
+                    continue    
                 block_symbols.extend(word.symbols)
                 word_text = ''
                 
@@ -90,8 +107,6 @@ def get_best_prediction(fn):
                 for symbol in word.symbols:
                     word_text = word_text + symbol.text
                     
-#                 print(u'Word text: {} (confidence: {})\n'.format(
-#                     word_text, word.confidence))
 
                 word_texts[word_text] = word.confidence
     if (len(word_texts)) == 0:
@@ -99,27 +114,40 @@ def get_best_prediction(fn):
     best_prediction = get_max_value_from_dict(word_texts)            
     return  best_prediction, word_texts[best_prediction]
 
-def get_input_names():
+def get_input_names(dir_):
     '''
     return a list of frame names
     '''
-    return glob.glob(INPUT_DIR + '/*')
+    return glob.glob(dir_ + '/*')
 
 def filename_to_id(filename):
     filename = filename.split('_crop.')[0]
     return filename.split('crop_frames/')[1]
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser("Script for performing ocr on frames")
+    parser.add_argument("--inputs-dir", type=str, required=True)
+    parser.add_argument("--results-dir", type=str, required=True)
+    parser.add_argument("--results-file", type=str, required=True)
+    args = parser.parse_args()
     
-    file_names = get_input_names()
+    
+
+    makedirs(args.inputs_dir, exist_ok=True)
+    makedirs(args.results_dir, exist_ok=True)
+    file_names = get_input_names(args.inputs_dir)
     image_ids = []
     predictions = []
     confidences = []
     for i, fn in enumerate(tqdm(file_names)):
         if i >= 50:break
-
+        
         image_id = filename_to_id(fn)
+#         try:
         prediction, confidence = get_best_prediction(fn)
+#         except:
+#             print(f'Cannot predict {fn}')
+#             continue
         image_ids.append(image_id)
         predictions.append(prediction)
         confidences.append(confidence)
@@ -128,5 +156,5 @@ if __name__ == '__main__':
     df['id'] = image_ids
     df['prediction'] = predictions
     df['confidence'] = confidences
-    df.to_csv(RESULTS_DIR + RESULT_NAME, index=None)
+    df.to_csv(args.results_dir + args.results_file, index=None)
     

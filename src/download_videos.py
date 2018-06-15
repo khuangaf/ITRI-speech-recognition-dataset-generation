@@ -24,10 +24,7 @@ DEVELOPER_KEY = 'AIzaSyAT6yaU6UFz7OnnyTWshvAZzEJVU4x3aus'
 YOUTUBE_API_SERVICE_NAME = "youtube"
 YOUTUBE_API_VERSION = "v3"
 
-VIDEOS_DIR = 'videos'
-AUDIOS_DIR = 'audios'
-os.makedirs(VIDEOS_DIR, exist_ok=True)
-os.makedirs(AUDIOS_DIR, exist_ok=True)
+
 
 # In[56]:
 
@@ -125,16 +122,24 @@ def download_audio(video_id, path="audios", verbose=True):
         print('Failed to download audio: {}'.format(e))
         return False
 
-def read_drama_names():
-    with open('drama_list.txt', 'r') as f:
+def read_drama_names(drama_file):
+    with open(drama_file, 'r') as f:
         drama_list = [d.strip() for d in f.readlines()]
     return drama_list
 
 def main():
     parser = argparse.ArgumentParser("Script for downloading youtube video")
     parser.add_argument("--thread-count", type=int, default=50)
+    parser.add_argument("--drama-file", type=str, required=True)
+    parser.add_argument("--videos-dir", type=str, required=True)
+    parser.add_argument("--audios-dir", type=str, required=True)
     args = parser.parse_args()
-    dramas = read_drama_names()
+    
+    
+    os.makedirs(args.videos_dir, exist_ok=True)
+    os.makedirs(args.audios_dir, exist_ok=True)
+    
+    dramas = read_drama_names(args.drama_file)
     try: 
         for drama in dramas:
             playlist_id = get_playlist_id(drama)
@@ -144,13 +149,13 @@ def main():
             parallel = Parallel(args.thread_count//2, backend="threading", verbose=10)
             
             #download video
-            parallel(delayed(download_video)(video_id) for video_id in video_ids)
+            parallel(delayed(download_video)(video_id, path=args.videos_dir) for video_id in video_ids)
             
             # use multi-thread because downloading audios sometimes can be slow
             parallel = Parallel(args.thread_count, backend="threading", verbose=10)
             
             #download audio
-            parallel(delayed(download_audio)(video_id) for video_id in video_ids)
+            parallel(delayed(download_audio)(video_id, path=args.audios_dir) for video_id in video_ids)
         
             
     except Exception as e:
