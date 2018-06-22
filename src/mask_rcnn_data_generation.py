@@ -23,7 +23,7 @@ import argparse
 ENDPOINT_URL = 'https://vision.googleapis.com/v1p1beta1/images:annotate'
 
 
-os.environ['GOOGLE_APPLICATION_CREDENTIALS']='/home/ashutosh/ITRI-Youtube-c9cd1c1d883d.json'
+
 client = vision.ImageAnnotatorClient()
 
 

@@ -19,7 +19,7 @@ def video2frames(video_id, video_path, frame_path, sample_rate):
         #-hwaccel vdpau: hardware acceleration with GPU
         # -ss starting time
         # -t duration
-        cmd = f'ffmpeg -hwaccel vdpau -ss {starting_time} -t {split_duration} -i {path_video} -r {sample_rate} {frame_path}/{video_id}-%07d.png'
+        cmd = f'ffmpeg -hwaccel vdpau -ss {starting_time} -t {split_duration} -i {path_video} -r {sample_rate} {frame_path}/{video_id}-%07d-{sample_rate}.png'
         subprocess.call(cmd, shell=True)
     
     except Exception as e:

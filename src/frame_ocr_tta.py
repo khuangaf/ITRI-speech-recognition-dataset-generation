@@ -68,10 +68,6 @@ def bounding_box_is_centered(bounding_box, fn):
         return False
     else:
         return True
-def remove_intermediate_files(dir_):
-    file_list = glob.glob(f'{dir_}/*TEMP*')
-    [os.remove(f) for f in file_list]
-    
 def get_best_prediction(fn):
     
     with io.open(fn, 'rb') as f:
@@ -128,37 +124,64 @@ def filename_to_id(filename):
     filename = filename.split('_crop.')[0]
     return filename.split('crop_frames/')[1]
 
+def hist_equal(img):
+    img_yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
+
+def rgb_shift(img):
+    return  cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    
+# equalize the histogram of the Y channel
+    img_yuv[:,:,0] = cv2.equalizeHist(img_yuv[:,:,0])
+
+    # convert the YUV image back to RGB format
+    return cv2.cvtColor(img_yuv, cv2.COLOR_YUV2BGR)
+
+def remove_intermediate_files(dir_):
+    file_list = glob.glob(f'{dir_}/*TEMP*')
+    [os.remove(f) for f in file_list]
+    
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser("Script for performing ocr on frames")
+    parser = argparse.ArgumentParser("Script for ocr on frames and TTA")
     parser.add_argument("--inputs-dir", type=str, required=True)
     parser.add_argument("--results-dir", type=str, required=True)
     parser.add_argument("--results-file", type=str, required=True)
     args = parser.parse_args()
     
     
-
+    # remove temp files created by tta
+    remove_intermediate_files(args.inputs_dir)
+    
     makedirs(args.inputs_dir, exist_ok=True)
     makedirs(args.results_dir, exist_ok=True)
     file_names = get_input_names(args.inputs_dir)
     image_ids = []
     predictions = []
     confidences = []
-    
-    # remove temp files created by tta
-    remove_intermediate_files(args.inputs_dir)
     for i, fn in enumerate(tqdm(file_names)):
         if i >= 50:break
         
+        
+        
         image_id = filename_to_id(fn)
-#         try:
-        prediction, confidence = get_best_prediction(fn)
+        
+        # test time augmentatin 
+        temp_fn = args.inputs_dir + image_id + '-TEMP.png'
+        img = cv2.imread(fn)
+#         temp_img = hist_equal(img)
+        temp_img = rgb_shift(img)
+        cv2.imwrite(temp_fn, temp_img)
+        
+        prediction, confidence = get_best_prediction(temp_fn)
 #         except:
 #             print(f'Cannot predict {fn}')
 #             continue
         image_ids.append(image_id)
         predictions.append(prediction)
         confidences.append(confidence)
-
+        
+        
+        # remove temp file
+        os.remove(temp_fn)
     df = pd.DataFrame(columns=['id', 'prediction', 'confidence'])
     df['id'] = image_ids
     df['prediction'] = predictions
