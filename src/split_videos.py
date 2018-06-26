@@ -12,14 +12,14 @@ def video2frames(video_id, video_path, frame_path, sample_rate):
     video_duration = get_duration(path_video)
     
     # split only the main part of the video
-    starting_time = 0.1 * video_duration
+    starting_time = 0.2 * video_duration
     split_duration = 0.8 * video_duration
     try:
         #-loglevel panic: slience
         #-hwaccel vdpau: hardware acceleration with GPU
         # -ss starting time
         # -t duration
-        cmd = f'ffmpeg -hwaccel vdpau -ss {starting_time} -t {split_duration} -i {path_video} -r {sample_rate} {frame_path}/{video_id}-%07d-{sample_rate}.png'
+        cmd = f'ffmpeg -ss {starting_time} -t {split_duration} -i {path_video} -r {sample_rate} {frame_path}/{video_id}-%07d-{sample_rate}.png'
         subprocess.call(cmd, shell=True)
     
     except Exception as e:

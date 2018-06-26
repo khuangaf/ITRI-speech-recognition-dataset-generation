@@ -123,8 +123,8 @@ def download_audio(video_id, path="audios", verbose=True):
         return False
 
 def read_drama_names(drama_file):
-    with open(drama_file, 'r') as f:
-        drama_list = [d.strip() for d in f.readlines()]
+    with open(drama_file, 'rb') as f:
+        drama_list = [d.decode('utf-8').strip() for d in f.readlines()]
     return drama_list
 
 def main():
