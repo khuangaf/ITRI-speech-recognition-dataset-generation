@@ -102,7 +102,7 @@ def get_best_prediction(fn):
                 word_box_ratio = get_bounding_box_ratio(word.bounding_box)    
                 if word_box_ratio < 3 or word_box_ratio > 18: 
                     continue
-                if not bounding_box_is_centered(block.bounding_box, fn):
+                if not bounding_box_is_centered(word.bounding_box, fn):
                     continue    
                 block_symbols.extend(word.symbols)
                 word_text = ''
@@ -163,5 +163,5 @@ if __name__ == '__main__':
     df['id'] = image_ids
     df['prediction'] = predictions
     df['confidence'] = confidences
-    df.to_csv(args.results_dir + args.results_file, index=None)
+    df.to_csv(args.results_dir +'/'+ args.results_file, index=None)
     
