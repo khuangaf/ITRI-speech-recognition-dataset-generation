@@ -46,6 +46,25 @@ def get_bounding_box_ratio(bounding_box):
 
     return float(x2 - x1) / float(y2-y1 + 0.000000001) 
 
+def bounding_box_is_bottom(bounding_box, fn):
+    '''
+    return False if the bounding box is not at the bottom
+    '''
+    bottom_right = bounding_box.vertices[2]
+    top_left = bounding_box.vertices[0]
+    bottom_right = bounding_box.vertices[2]
+    
+    # get the center.x of the detected bounding box
+    y1 = top_left.y
+    
+    img = cv2.imread(fn)
+    image_y = img.shape[0]
+    
+    if y1 < image_y * 0.6:
+        return False
+    else:
+        return True
+
 def bounding_box_is_centered(bounding_box, fn):
     '''
     return False if the bounding box is not centered
@@ -72,6 +91,8 @@ def bounding_box_is_centered(bounding_box, fn):
 def remove_intermediate_files(dir_):
     file_list = glob.glob(f'{dir_}/*TEMP*')
     [os.remove(f) for f in file_list]
+
+    
     
 def get_best_prediction(fn):
     
@@ -90,7 +111,7 @@ def get_best_prediction(fn):
             # get rid of the weird text block
             if block_box_ratio < 3 or block_box_ratio > 18: 
                 continue
-            if not bounding_box_is_centered(block.bounding_box, fn):
+            if not bounding_box_is_bottom(block.bounding_box, fn):
                     continue 
 
             block_words = []
@@ -103,7 +124,7 @@ def get_best_prediction(fn):
                 word_box_ratio = get_bounding_box_ratio(word.bounding_box)    
                 if word_box_ratio < 3 or word_box_ratio > 18: 
                     continue
-                if not bounding_box_is_centered(word.bounding_box, fn):
+                if not bounding_box_is_bottom(word.bounding_box, fn):
                     continue    
                 block_symbols.extend(word.symbols)
                 word_text = ''

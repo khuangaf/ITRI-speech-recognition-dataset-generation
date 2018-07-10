@@ -129,10 +129,10 @@ def read_drama_names(drama_file):
 
 def main():
     parser = argparse.ArgumentParser("Script for downloading youtube video")
-    parser.add_argument("--thread-count", type=int, default=50)
-    parser.add_argument("--drama-file", type=str, required=True)
-    parser.add_argument("--videos-dir", type=str, required=True)
-    parser.add_argument("--audios-dir", type=str, required=True)
+    parser.add_argument("--thread_count", type=int, default=50)
+    parser.add_argument("--drama_file", type=str, required=True)
+    parser.add_argument("--videos_dir", type=str, required=True)
+    parser.add_argument("--audios_dir", type=str, required=True)
     args = parser.parse_args()
     
     

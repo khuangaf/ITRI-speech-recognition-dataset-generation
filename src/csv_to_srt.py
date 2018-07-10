@@ -22,6 +22,10 @@ def get_time(id, sample_rate, start_time):
 #     print(sample_rate)
     return sample_index / sample_rate + start_time
 
+def same_subtitle(current_subtitle, next_subtitle):
+    current_set = set(current_subtitle)
+    next_set = set(next_subtitle)
+    
 
 def second2timecode(time):
     hours = time // 3600
@@ -47,8 +51,10 @@ def main():
     os.makedirs(args.srts_dir, exist_ok=True)
     video_csvs = get_all_inputs(csvs_dir)
     for video_csv in tqdm(video_csvs):
+        
         video_id = video_csv.split('.csv')[0]
-#         print(f'{csvs_dir}/{video_csv}')
+        if not os.path.isfile(f'{videos_dir}/{video_id}.mp4'):
+            continue
         df = pd.read_csv(f'{csvs_dir}/{video_csv}')
         first_sample = df.id.values[0]
         sample_rate = get_sample_rate(first_sample)
@@ -64,7 +70,7 @@ def main():
         video_start_time = 0.2 * duration  - spf*2
         subtitle_start_time = video_start_time
         # get only subtitles with confidence > 0.95
-        df = df.loc[df.confidence >= 0.95, :].set_index('id')
+        df = df.loc[df.confidence >= 0.7, :].set_index('id')
         
         # a string that gathers subtitles for srt output
         subtitles = ''

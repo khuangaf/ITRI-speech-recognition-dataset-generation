@@ -38,11 +38,11 @@ def gather_video_ids(video_path):
     return video_ids
 
 def main():
-    parser = argparse.ArgumentParser("Script for downloading youtube video")
-    parser.add_argument("--thread-count", type=int, default=3)
-    parser.add_argument("--videos-dir", type=str, required=True)
-    parser.add_argument("--frames-dir", type=str, required=True)
-    parser.add_argument("--sample-rate", type=float, required=True)
+    parser = argparse.ArgumentParser("Script for splitting youtube videos")
+    parser.add_argument("--thread_count", type=int, default=3)
+    parser.add_argument("--videos_dir", type=str, required=True)
+    parser.add_argument("--frames_dir", type=str, required=True)
+    parser.add_argument("--sample_rate", type=float, required=True)
     
     args = parser.parse_args()
     
