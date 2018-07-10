@@ -5,6 +5,7 @@ import subprocess
 import os
 from tqdm import tqdm
 import argparse
+import operator
 
 def get_duration(path_video):
     # return the duration of path_video in second
@@ -19,13 +20,78 @@ def get_all_inputs(dir):
     
 def get_time(id, sample_rate, start_time):
     sample_index = int(id.split('-')[-2])
-#     print(sample_rate)
+
     return sample_index / sample_rate + start_time
 
+def get_max_value_from_dict(d):
+    return max(d.items(), key=operator.itemgetter(1))[0]
+
+def get_end_bestprediction(i, all_predictions, all_confidences):
+    
+    '''
+    input:
+        i: starting index
+
+    output: 
+        next_i,
+        ending index and best prediction
+    '''
+    # map prediction to highest confidence
+    prediction_confidence_dict = {}
+    
+    current_subtitle = all_predictions[i]
+    current_confidence = all_confidences[i]
+    
+    prediction_confidence_dict[current_subtitle] = current_confidence
+    
+    if i+1 >= len(all_predictions):
+        next_i = i
+        best_prediction = current_subtitle
+        return next_i,best_prediction
+    
+    next_i = i+1
+    next_subtitle = all_predictions[next_i]
+    next_confidence = all_confidences[next_i]
+#     print(f"current {current_subtitle.encode('utf-8')}")
+#     print([p.encode('utf-8')  for p in all_predictions[30:]])
+    while same_subtitle(current_subtitle, next_subtitle):
+#         print(f"next {next_subtitle.encode('utf-8')}")
+        # update best confidence if it is higher than the original one in the dictionary
+        if next_subtitle in prediction_confidence_dict and next_confidence > prediction_confidence_dict[next_subtitle]:
+            prediction_confidence_dict[next_subtitle] = next_confidence
+        elif next_subtitle not in prediction_confidence_dict:
+            prediction_confidence_dict[next_subtitle] = next_confidence
+            
+        next_i += 1
+        if next_i >= len(all_predictions):
+            break
+        next_subtitle = all_predictions[next_i]
+        next_confidence = all_confidences[next_i]
+    next_i -= 1
+    best_prediction = get_max_value_from_dict(prediction_confidence_dict)
+    return next_i, best_prediction
+
+    
 def same_subtitle(current_subtitle, next_subtitle):
     current_set = set(current_subtitle)
     next_set = set(next_subtitle)
+    current_set_len = len(current_set)
+    next_set_len = len(next_set)
+    intersect_set = current_set & next_set
+    intersect_set_len = len(intersect_set)
     
+#     print(current_subtitle.encode('utf-8'))
+#     print(next_subtitle.encode('utf-8'))
+#     print(f"intersect_set_len {intersect_set_len}")
+    
+#     print(f"current_set_len {current_set_len}")
+    
+
+    if intersect_set_len >= 0.7 * current_set_len or intersect_set_len >= 0.7 * next_set_len:
+        return True
+    else:
+        return False
+        
 
 def second2timecode(time):
     hours = time // 3600
@@ -69,28 +135,34 @@ def main():
         # records the cut-off of the video
         video_start_time = 0.2 * duration  - spf*2
         subtitle_start_time = video_start_time
-        # get only subtitles with confidence > 0.95
-        df = df.loc[df.confidence >= 0.7, :].set_index('id')
+        
+        # get only subtitles with confidence > 0.7
+        df = df.loc[df.confidence >= 0.7, :]
         
         # a string that gathers subtitles for srt output
         subtitles = ''
         subtitle_count = 1
-        for index, row in df.iterrows():
-            if current_subtitle == None:
+        
+        all_predictions = df.prediction.values
+        all_confidences = df.confidence.values
+        all_frame_indexes = df.id.values
+
+        start_i = 0
+        while start_i < len((all_predictions)):
+
+            end_i, current_subtitle = get_end_bestprediction(start_i, all_predictions, all_confidences)
+        
+            end_frame_index = all_frame_indexes[end_i]
+            start_frame_index = all_frame_indexes[start_i]
+            
+            subtitle_end_time = get_time(end_frame_index, sample_rate, video_start_time) 
+            subtitle_start_time = get_time(start_frame_index, sample_rate, video_start_time)  - spf 
                 
-                current_subtitle = row.prediction
-#                 continue
-            elif current_subtitle == row.prediction:
-                subtitle_end_time = get_time(index, sample_rate, video_start_time) 
-            elif current_subtitle != row.prediction:
-                
-                subtitles += f'{subtitle_count}\n'
-                subtitles += second2timecode(subtitle_start_time) + ' --> ' + second2timecode(subtitle_end_time) + '\n'
-                subtitles += current_subtitle + '\n\n'
-                current_subtitle = row.prediction
-                subtitle_start_time = get_time(index, sample_rate, video_start_time) - spf
-                subtitle_end_time = get_time(index, sample_rate, video_start_time) 
-                subtitle_count +=1
+            subtitles += f'{subtitle_count}\n'
+            subtitles += second2timecode(subtitle_start_time) + ' --> ' + second2timecode(subtitle_end_time) + '\n'
+            subtitles += current_subtitle + '\n\n'
+            start_i = end_i +1
+            subtitle_count += 1
 
         with open(f'{srts_dir}/{video_id}.srt', 'wb') as f:
             f.write(subtitles.encode('utf-8'))
