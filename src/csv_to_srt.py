@@ -34,7 +34,7 @@ def get_end_bestprediction(i, all_predictions, all_confidences):
 
     output: 
         next_i,
-        ending index and best prediction
+        ending index and best prediction with highest confidence
     '''
     # map prediction to highest confidence
     prediction_confidence_dict = {}
@@ -55,7 +55,7 @@ def get_end_bestprediction(i, all_predictions, all_confidences):
 #     print(f"current {current_subtitle.encode('utf-8')}")
 #     print([p.encode('utf-8')  for p in all_predictions[30:]])
     while same_subtitle(current_subtitle, next_subtitle):
-#         print(f"next {next_subtitle.encode('utf-8')}")
+
         # update best confidence if it is higher than the original one in the dictionary
         if next_subtitle in prediction_confidence_dict and next_confidence > prediction_confidence_dict[next_subtitle]:
             prediction_confidence_dict[next_subtitle] = next_confidence
@@ -105,22 +105,31 @@ def second2timecode(time):
 
 def main():
     parser = argparse.ArgumentParser("Script for processing csv to srt")
-    parser.add_argument("--thread-count", type=int, default=3)
-    parser.add_argument("--srts-dir", type=str, required=True)
-    parser.add_argument("--csvs-dir", type=str, required=True)
-    parser.add_argument("--videos-dir", type=str, required=True)
+    parser.add_argument("--thread_count", type=int, default=3)
+    parser.add_argument("--srts_dir", type=str, required=True)
+    parser.add_argument("--csvs_dir", type=str, required=True)
+    parser.add_argument("--videos_dir", type=str, required=True)
+    parser.add_argument("--input_csv", type=str, required=False)
+    
     args = parser.parse_args()
     
     srts_dir = args.srts_dir
     csvs_dir = args.csvs_dir
     videos_dir = args.videos_dir
+    input_csv = args.input_csv
     os.makedirs(args.srts_dir, exist_ok=True)
-    video_csvs = get_all_inputs(csvs_dir)
+    if input_csv != None:
+        video_csvs = [input_csv]
+    else:
+        video_csvs = get_all_inputs(csvs_dir)
+    
     for video_csv in tqdm(video_csvs):
         
         video_id = video_csv.split('.csv')[0]
+        print(f'{videos_dir}/{video_id}.mp4')
         if not os.path.isfile(f'{videos_dir}/{video_id}.mp4'):
             continue
+
         df = pd.read_csv(f'{csvs_dir}/{video_csv}')
         first_sample = df.id.values[0]
         sample_rate = get_sample_rate(first_sample)

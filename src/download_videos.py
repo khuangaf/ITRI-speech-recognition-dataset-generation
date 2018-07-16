@@ -53,7 +53,7 @@ def get_playlist_id(name):
 def get_video_ids(playlist_id):
     
     #search for all the videos given a playlist id
-    search_response = youtube.playlistItems().list(part='contentDetails',maxResults=50,playlistId=playlist_id).execute()
+    search_response = youtube.playlistItems().list(part='contentDetails',maxResults=1,playlistId=playlist_id).execute()
     all_videos = search_response['items']
     video_ids = []
     for vid in all_videos:
@@ -145,14 +145,16 @@ def main():
             playlist_id = get_playlist_id(drama)
             video_ids = get_video_ids(playlist_id)
             
+            video_threads = min(args.thread_count//2, len(video_ids))
+            audio_threads = min(args.thread_count, len(video_ids))
             # use multi-thread because downloading audios sometimes can be slow
-            parallel = Parallel(args.thread_count//2, backend="threading", verbose=10)
+            parallel = Parallel(video_threads, backend="threading", verbose=10)
             
             #download video
             parallel(delayed(download_video)(video_id, path=args.videos_dir) for video_id in video_ids)
             
             # use multi-thread because downloading audios sometimes can be slow
-            parallel = Parallel(args.thread_count, backend="threading", verbose=10)
+            parallel = Parallel(audio_threads, backend="threading", verbose=10)
             
             #download audio
             parallel(delayed(download_audio)(video_id, path=args.audios_dir) for video_id in video_ids)
