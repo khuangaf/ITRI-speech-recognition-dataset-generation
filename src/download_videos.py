@@ -20,7 +20,7 @@ from joblib import Parallel, delayed
 import argparse
 # arguments to be passed to build function
 
-DEVELOPER_KEY = 'AIzaSyAT6yaU6UFz7OnnyTWshvAZzEJVU4x3aus'
+DEVELOPER_KEY = 'AIzaSyCxMsbfq_AXhzIf40L5MvaZr2KEVV0lc6s'
 YOUTUBE_API_SERVICE_NAME = "youtube"
 YOUTUBE_API_VERSION = "v3"
 
@@ -122,11 +122,27 @@ def download_audio(video_id, path="audios", verbose=True):
         print('Failed to download audio: {}'.format(e))
         return False
 
+def extract_audio(video_id,videos_dir, audios_dir):
+    video_path = f'{videos_dir}/{video_id}.mp4'
+    audio_path = f'{audios_dir}/{video_id}.mp3'
+    
+    #-i: it is the path to the input file. The second option -f mp3 tells ffmpeg that the ouput is in mp3 format. 
+    #-ab 192000: we want the output to be encoded at 192Kbps 
+    #-vn :we dont want video. 
+
+    cmd = f'ffmpeg -i {video_path} -f mp3 -ab 192000 -vn -y {audio_path}'
+    subprocess.call(cmd, shell=True)
+    
+
 def read_drama_names(drama_file):
     with open(drama_file, 'rb') as f:
         drama_list = [d.decode('utf-8').strip() for d in f.readlines()]
     return drama_list
 
+def remove_intermediate_files(dir_):
+    file_list = glob.glob(f'{dir_}/*temp*')
+    [os.remove(f) for f in file_list]
+    
 def main():
     parser = argparse.ArgumentParser("Script for downloading youtube video")
     parser.add_argument("--thread_count", type=int, default=50)
@@ -139,6 +155,8 @@ def main():
     os.makedirs(args.videos_dir, exist_ok=True)
     os.makedirs(args.audios_dir, exist_ok=True)
     
+    remove_intermediate_files(args.videos_dir)
+    remove_intermediate_files(args.audios_dir)
     dramas = read_drama_names(args.drama_file)
     try: 
         for drama in dramas:
@@ -157,7 +175,10 @@ def main():
             parallel = Parallel(audio_threads, backend="threading", verbose=10)
             
             #download audio
-            parallel(delayed(download_audio)(video_id, path=args.audios_dir) for video_id in video_ids)
+#             parallel(delayed(download_audio)(video_id, path=args.audios_dir) for video_id in video_ids)
+
+            # extract audio
+            parallel(delayed(extract_audio)(video_id, args.videos_dir, args.audios_dir) for video_id in video_ids)
         
             
     except Exception as e:

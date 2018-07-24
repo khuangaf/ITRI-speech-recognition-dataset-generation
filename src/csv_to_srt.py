@@ -6,6 +6,7 @@ import os
 from tqdm import tqdm
 import argparse
 import operator
+import editdistance
 
 def get_duration(path_video):
     # return the duration of path_video in second
@@ -80,17 +81,19 @@ def same_subtitle(current_subtitle, next_subtitle):
     intersect_set = current_set & next_set
     intersect_set_len = len(intersect_set)
     
-#     print(current_subtitle.encode('utf-8'))
-#     print(next_subtitle.encode('utf-8'))
-#     print(f"intersect_set_len {intersect_set_len}")
-    
-#     print(f"current_set_len {current_set_len}")
-    
 
     if intersect_set_len >= 0.7 * current_set_len or intersect_set_len >= 0.7 * next_set_len:
         return True
     else:
         return False
+
+# edit distance based
+# def same_subtitle(current_subtitle, next_subtitle):
+#     score = editdistance.eval(current_subtitle,next_subtitle)
+#     if score < max(len(current_subtitle), len(next_subtitle)) * 0.5:
+#         return True
+#     else:
+#         return False
         
 
 def second2timecode(time):
@@ -146,7 +149,7 @@ def main():
         subtitle_start_time = video_start_time
         
         # get only subtitles with confidence > 0.7
-        df = df.loc[df.confidence >= 0.7, :]
+        df = df.loc[df.confidence >= 0.98, :]
         
         # a string that gathers subtitles for srt output
         subtitles = ''

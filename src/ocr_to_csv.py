@@ -19,11 +19,13 @@ import glob
 from tqdm import tqdm
 from time import gmtime
 import argparse
+from joblib import Parallel, delayed
 
 ENDPOINT_URL = 'https://vision.googleapis.com/v1p1beta1/images:annotate'
 
 
-os.environ['GOOGLE_APPLICATION_CREDENTIALS']='/home/A60174/ITRI-Youtube-c9cd1c1d883d.json'
+os.environ['GOOGLE_APPLICATION_CREDENTIALS']='/data/ITRI-create-speech-recognition-dataset/itriaccount.json'
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS']='/home/A60174/ITRI-Youtube-c9cd1c1d883d.json'
 client = vision.ImageAnnotatorClient()
 
 
@@ -64,6 +66,29 @@ def bounding_box_is_bottom(bounding_box, img):
     else:
         return True
 
+    
+def bounding_box_is_peripheral(bounding_box, img):
+    '''
+    return True if the bounding box is at the peripheral
+    '''
+    bottom_right = bounding_box.vertices[2]
+    top_left = bounding_box.vertices[0]
+    bottom_right = bounding_box.vertices[2]
+    
+    # get the center.x of the detected bounding box
+    x1 = top_left.x
+    x2 = bottom_right.x
+    
+    middle_bb = (x1 + x2) /2.0
+
+    # prevent devision by zero
+    img_width = float(img.shape[1] ) + 0.000000001
+    
+    if middle_bb < img_width * 0.16 or middle_bb > img_width * (1 - 0.16):
+        return True
+    else:
+        return False
+    
 def bounding_box_is_centered(bounding_box, img):
     '''
     return False if the bounding box is not centered
@@ -80,7 +105,6 @@ def bounding_box_is_centered(bounding_box, img):
 
     middle_img = img.shape[1] / 2.0
     img_width = float(img.shape[1] ) + 0.000000001
-#     print((middle_bb - middle_img) / img_width)
     
     # if the center of the bounding box is shifted
     if abs(middle_bb - middle_img) / img_width > 0.02:
@@ -98,8 +122,10 @@ def boundingbox_neighbor(bounding_box_1, bounding_box_2):
     bb_height =  bottom_right_1.y - top_left_1.y
     
 
+    # if the second bbox is at the next line
     if top_left_2.y - bottom_right_1.y > 0 and top_left_2.y - bottom_right_1.y  < 0.5 * bb_height:
         return True
+    # if the second bbox is next to the first horizontally
     elif abs(bottom_right_1.y - bottom_right_2.y) < 0.2 *bb_height :
         return True
     else:
@@ -117,7 +143,8 @@ def get_merge_list(prediction_boundingbox_dict, prediction_confidence_dict):
     
     merge_list = []
     for i in range(len(predictions) -1):
-        if boundingbox_neighbor(prediction_boundingbox_dict[predictions[i]], prediction_boundingbox_dict[predictions[i+1]]):
+        # if both predictions are neighbor and they are of high confidence
+        if boundingbox_neighbor(prediction_boundingbox_dict[predictions[i]], prediction_boundingbox_dict[predictions[i+1]]) and prediction_confidence_dict[predictions[i]] > 0.5 and prediction_confidence_dict[predictions[i+1]] > 0.5:
             if len(merge_list) == 0:
                 merge_list.append(predictions[i])
                 merge_list.append(predictions[i+1])
@@ -126,6 +153,10 @@ def get_merge_list(prediction_boundingbox_dict, prediction_confidence_dict):
             elif merge_list[-1] == predictions[i]:
                 merge_list.append(predictions[i])
                 merge_list.append(predictions[i+1])
+    # if there is no neighbor, get prediction with highest confidence
+    if len(merge_list) == 0:
+        merge_list = get_max_value_from_dict(prediction_confidence_dict)
+        merge_list = [merge_list] 
     return merge_list
     
 def merge_get_confidence(merge_list, prediction_confidence_dict):
@@ -175,8 +206,11 @@ def get_best_prediction(fn):
             # get rid of the weird text block
             if block_box_ratio < 1 or block_box_ratio > 18: 
                 continue
+            if bounding_box_is_peripheral(block.bounding_box, original_image):
+                continue                
             if not bounding_box_is_bottom(block.bounding_box, original_image):
-                    continue 
+                continue 
+            
 
             block_words = []
             for paragraph in block.paragraphs:
@@ -188,6 +222,8 @@ def get_best_prediction(fn):
                 word_box_ratio = get_bounding_box_ratio(word.bounding_box)    
                 if word_box_ratio < 1 or word_box_ratio > 18: 
                     continue
+                if bounding_box_is_peripheral(block.bounding_box, original_image):
+                    continue 
                 if not bounding_box_is_bottom(word.bounding_box, original_image):
                     continue    
 
@@ -207,7 +243,6 @@ def get_best_prediction(fn):
     merge_list = get_merge_list(prediction_boundingbox_dict, prediction_confidence_dict)
     if len(merge_list) == 1:
         best_prediction = merge_list[0]
-
         confidence = prediction_confidence_dict[best_prediction]
     else:
         best_prediction, confidence = merge_get_confidence(merge_list, prediction_confidence_dict)
@@ -225,6 +260,14 @@ def get_input_dirs(dir_):
 def dir_to_id(dir_):
     return dir_.split('/')[-1]
 
+def get_result(dir_):
+    image_id = dir_to_id(dir_)
+    image_fn = f'{dir_}/image.png'
+    filtered_fn = f'{dir_}/tta.png'
+    prediction, confidence = get_best_prediction(filtered_fn)
+    
+    return image_id, prediction, confidence
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Script for performing ocr on frames")
     parser.add_argument("--inputs_dir", type=str, required=True)
@@ -241,34 +284,41 @@ if __name__ == '__main__':
     predictions = []
     confidences = []
 
-    filtered_predictions = []
-    filtered_confidences = []
+#     filtered_predictions = []
+#     filtered_confidences = []
     
     # remove temp files created by tta
 #     remove_intermediate_files(args.inputs_dir)
     print(args.inputs_dir)
+    parallel = Parallel(40, backend="threading", verbose=10)
+    
     for i, dir_ in enumerate(tqdm(dirs)):
-#         if i not in range(500,510):continue
         
         image_id = dir_to_id(dir_)
 
         image_fn = f'{dir_}/image.png'
         filtered_fn = f'{dir_}/tta.png'
         
-#         try:
-        filtered_prediction, filtered_confidence = get_best_prediction(filtered_fn)
-#         except:
-#             continue
+        
+        prediction, confidence = get_best_prediction(filtered_fn)
+
 
         image_ids.append(image_id)
 
-        filtered_predictions.append(filtered_prediction)
-        filtered_confidences.append(filtered_confidence)
-
+        predictions.append(prediction)
+        confidences.append(confidence)
+        
+#     results = parallel(delayed(get_result)(dir_) for dir_ in dirs)
+#     for r in results:
+#         image_ids.append(r[0])
+#         predictions.append(r[1])
+#         confidences.append(r[2])
+        
+    image_ids, predictions, confidences
     df = pd.DataFrame(columns=['id', 'prediction', 'confidence'])
     df['id'] = image_ids
-    df['prediction'] = filtered_predictions
-    df['confidence'] = filtered_confidences
+    df['prediction'] = predictions
+    df['confidence'] = confidences
     df['frame_id'] = df.id.apply(lambda x: int(x.split('-')[-2]))
     df.sort_values('frame_id', inplace=True)
     df = df.loc[:,['id', 'prediction', 'confidence']]

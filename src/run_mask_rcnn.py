@@ -15,17 +15,14 @@ if __name__ == '__main__':
 #restrict gpu
 import shutil
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = ''
-
+# os.environ['CUDA_VISIBLE_DEVICES'] = ''
+import datetime
 import tensorflow as tf
 from tqdm import tqdm
 
-config = tf.ConfigProto()
-config.gpu_options.allow_growth = True
-sess = tf.Session(config=config)
 
 from keras.backend.tensorflow_backend import set_session
-set_session(sess) 
+
 
 # from augment import *
 import sys
@@ -34,7 +31,7 @@ import datetime
 import numpy as np
 import skimage.io
 from imgaug import augmenters as iaa
-
+import skimage
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("Mask_RCNN/")
@@ -62,7 +59,7 @@ def get_all_id(dir_):
     return list(ids)
 # Results directory
 # Save submission files here
-RESULTS_DIR = '/data/ITRI-create-speech-recognition-dataset/mandarin/maskrcnn_results/'
+# RESULTS_DIR = '/data/ITRI-create-speech-recognition-dataset/mandarin/maskrcnn_results/'
 
 # The dataset doesn't have a standard train/val split, so I picked
 # a variety of images to surve as a validation set.
@@ -182,12 +179,12 @@ class SubtitleDataset(utils.Dataset):
         # "val": use hard-coded list above
         # "train": use data from stage1_train minus the hard-coded list above
         # else: use the data from the specified sub-directory
-        assert subset in ["train", "val", "test"]
+        assert subset in ["train", "val", "test", "test_manual"]
 
 
         if subset == "val":
             image_ids = VAL_IMAGE_IDS
-        elif subset == "test":
+        elif subset in ["test", "test_manual"]:
             image_ids = image_ids
         else:
             # Get image ids from directory names
@@ -200,7 +197,7 @@ class SubtitleDataset(utils.Dataset):
         for image_id in image_ids:
             # get only the file names
 
-            if subset=='test':
+            if subset in ['test', 'test_manual']:
                 self.add_image(
                     "subtitle",
                     image_id=image_id,
@@ -302,18 +299,42 @@ def train(model, dataset_dir, subset):
 #  Detection
 ############################################################
 
-def detect(model, dataset_dir, subset, processed_frames_dir, input_id):
+def detect(model, dataset_dir, subset, processed_frames_dir, input_id, results_dir):
     """Run detection on images in the given directory."""
     print("Running on {}".format(dataset_dir))
 
+    def crop_bottom(image, crop_ratio=0.7):
+        if len(image.shape)==3:
+            height, width, _ = image.shape
+        else:
+            height, width = image.shape
+        return image[int(height*crop_ratio):,:]
+    
+    def uncrop_bottom(current_mask, original_mask):
+        padded_mask = np.zeros(original_mask.shape)
+        current_mask_height, _ = current_mask.shape
+        padded_mask[-current_mask_height:,:] = current_mask
+        return padded_mask
+    
+    def scale(image):
+        return cv2.resize(image,None,fx=0.7, fy=0.7, interpolation = cv2.INTER_CUBIC)
+    
+    def unscale(current_mask, original_mask):
+        return skimage.transform.resize(current_mask, original_mask.shape)
+    
+    def rotate90(image):
+        return skimage.transform.rotate(image, 90)
+    def unrotate90(image):
+        return skimage.transform.rotate(image, -90)
     # Create directory
-    if not os.path.exists(RESULTS_DIR):
-        os.makedirs(RESULTS_DIR, exist_ok=True)
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir, exist_ok=True)
     
     
     
     # if testing, 
     if subset=='test':
+        # if you have specify which video_id to run mask-rcnn
         if input_id != None:
             ids = [input_id]
         else:
@@ -330,30 +351,26 @@ def detect(model, dataset_dir, subset, processed_frames_dir, input_id):
 
 
 
-            submit_dir = f"{video_id}"
-            submit_dir = os.path.join(RESULTS_DIR, submit_dir)
+            submit_dir = video_id
+            submit_dir = os.path.join(results_dir, submit_dir)
             os.makedirs(submit_dir, exist_ok=True)
 
             # Load over images
             for image_id in tqdm(dataset.image_ids):
                 # Load image and run detection
                 image = dataset.load_image(image_id)
-                
-                
+
+
                 height, width, _ = image.shape
-                crop_height = int(0.6*height)
-#                 image = image[crop_height:,:,:]
-                
-                
+    #             crop_height = int(0.6*height)
+
                 #resize for faster process and higher accuracy
                 if width >= 1000 or height >= 700:
                     image = cv2.resize(image,None,fx=0.5, fy=0.5, interpolation = cv2.INTER_CUBIC)
                 elif width >= 1500 or height >= 1000:
                     image = cv2.resize(image,None,fx=0.3, fy=0.3, interpolation = cv2.INTER_CUBIC)
-                
-                
-                
-#                 print(image.shape)
+
+
                 # Detect objects
                 r = model.detect([image], verbose=0)[0]
 
@@ -374,6 +391,7 @@ def detect(model, dataset_dir, subset, processed_frames_dir, input_id):
 
                 multi_masks_tta = multi_masks
 
+                original_image = image.copy()
                 # TTA: shift color
                 tta_transforms = ['flipud', 'fliplr']
                 for tta in tta_transforms:
@@ -383,9 +401,16 @@ def detect(model, dataset_dir, subset, processed_frames_dir, input_id):
                     elif tta == 'fliplr':
                         transform = np.fliplr
                         un_transform = np.fliplr
+                    elif tta == 'scale':
+                        transform = scale
+                        un_transform = np.array
+                    elif tta == 'rotate90':
+                        transform = rotate90
+                        un_transform = unrotate90
                     else:
                         continue
 
+                    image = original_image.copy()
                     image = transform(image)
                     r = model.detect([image], verbose=0)[0]
 
@@ -400,13 +425,16 @@ def detect(model, dataset_dir, subset, processed_frames_dir, input_id):
                         mask = masks[:, :, i]
                         multi_masks_1[np.where(mask==1)] = 1
 
-                    multi_masks_1 = un_transform(multi_masks_1)
-                    image = un_transform(image)
 
+                    multi_masks_1 = un_transform(multi_masks_1)
+    #                 image = un_transform(image)
+
+                    if tta == 'scale':
+                        multi_masks_1 = unscale(multi_masks_1, multi_masks_tta)
                     # get union of the masks
                     multi_masks_tta = np.logical_or(multi_masks_1, multi_masks_tta)
 
-                    masked_image = image.astype(np.uint8).copy()    
+                masked_image = original_image.astype(np.uint8).copy()    
 
                 for c in range(3):
                     masked_image[:,:,c] = np.where(multi_masks==1,masked_image[:,:,c], multi_masks)
@@ -414,23 +442,147 @@ def detect(model, dataset_dir, subset, processed_frames_dir, input_id):
                 os.makedirs(f'{submit_dir}/{source_id}', exist_ok=True)
                 result_file_name = f'{submit_dir}/{source_id}/filtered.png'
                 original_file_name = f'{submit_dir}/{source_id}/image.png'
-                cv2.imwrite(original_file_name, image.astype(np.uint8))
+                cv2.imwrite(original_file_name, original_image.astype(np.uint8))
                 cv2.imwrite(result_file_name, masked_image)
 
 
                 # store tta result
-                masked_image = image.astype(np.uint8).copy()
+                masked_image = original_image.astype(np.uint8).copy()
                 for c in range(3):
                     masked_image[:,:,c] = np.where(multi_masks_tta==1,masked_image[:,:,c], multi_masks_tta)
                 tta_file_name = f'{submit_dir}/{source_id}/tta.png'
-                cv2.imwrite(tta_file_name, masked_image)    
+                cv2.imwrite(tta_file_name, masked_image)   
 
-
+                
                 # move the processed frame to processed_frames_dir
                 shutil.move(source_path,processed_frames_dir)
+                
+    # test_manual mode: run on manully labelled data
+    elif subset=='test_manual':
+        # if you have specify which video_id to run mask-rcnn
+        
+        
+        image_ids = glob(f'{dataset_dir}/*')
+        
+        # Read dataset
+        dataset = SubtitleDataset()
+        dataset.load_subtitle(dataset_dir, subset, image_ids)
+        dataset.prepare()
+
+        submit_dir = results_dir
+
+        # Load over images
+        for image_id in tqdm(dataset.image_ids):
+            # Load image and run detection
+            image = dataset.load_image(image_id)
+
+
+            height, width, _ = image.shape
+#             crop_height = int(0.6*height)
+
+
+
+            #resize for faster process and higher accuracy
+            if width >= 1000 or height >= 700:
+                image = cv2.resize(image,None,fx=0.5, fy=0.5, interpolation = cv2.INTER_CUBIC)
+            elif width >= 1500 or height >= 1000:
+                image = cv2.resize(image,None,fx=0.3, fy=0.3, interpolation = cv2.INTER_CUBIC)
+
+
+            # Detect objects
+            r = model.detect([image], verbose=0)[0]
+
+            source_id = dataset.image_info[image_id]["id"].split('/')[-1].split('.png')[0]
+            source_path = dataset.image_info[image_id]['id']
+            masks = r['masks']
+            num_mask = masks.shape[2]
+
+            multi_masks = np.zeros(masks.shape[:-1])
+
+
+
+
+            #gather all mask together
+            for i in range(num_mask):
+                mask = masks[:, :, i]
+                multi_masks[np.where(mask==1)] = 1
+
+            multi_masks_tta = multi_masks
+            
+            original_image = image.copy()
+            # TTA: shift color
+            tta_transforms = ['flipud', 'fliplr']
+            for tta in tta_transforms:
+                if tta == 'flipud':
+                    transform = np.flipud
+                    un_transform = np.flipud
+                elif tta == 'fliplr':
+                    transform = np.fliplr
+                    un_transform = np.fliplr
+                elif tta == 'scale':
+                    transform = scale
+                    un_transform = np.array
+                elif tta == 'rotate90':
+                    transform = rotate90
+                    un_transform = unrotate90
+                else:
+                    continue
+
+                image = original_image.copy()
+                image = transform(image)
+                r = model.detect([image], verbose=0)[0]
+
+
+                masks = r['masks']
+                num_mask = masks.shape[2]
+
+                multi_masks_1 = np.zeros(masks.shape[:-1])
+
+                #gather all mask together
+                for i in range(num_mask):
+                    mask = masks[:, :, i]
+                    multi_masks_1[np.where(mask==1)] = 1
+
+                
+                multi_masks_1 = un_transform(multi_masks_1)
+#                 image = un_transform(image)
+                
+                if tta == 'scale':
+                    multi_masks_1 = unscale(multi_masks_1, multi_masks_tta)
+                # get union of the masks
+                multi_masks_tta = np.logical_or(multi_masks_1, multi_masks_tta)
+
+            masked_image = original_image.astype(np.uint8).copy()    
+
+            for c in range(3):
+                masked_image[:,:,c] = np.where(multi_masks==1,masked_image[:,:,c], multi_masks)
+
+            os.makedirs(f'{submit_dir}/{source_id}', exist_ok=True)
+            result_file_name = f'{submit_dir}/{source_id}/filtered.png'
+            original_file_name = f'{submit_dir}/{source_id}/image.png'
+            cv2.imwrite(original_file_name, original_image.astype(np.uint8))
+            cv2.imwrite(result_file_name, masked_image)
+
+
+            # store tta result
+            masked_image = original_image.astype(np.uint8).copy()
+            for c in range(3):
+                masked_image[:,:,c] = np.where(multi_masks_tta==1,masked_image[:,:,c], multi_masks_tta)
+            tta_file_name = f'{submit_dir}/{source_id}/tta.png'
+            cv2.imwrite(tta_file_name, masked_image)    
+
+
+            
     print("Saved to ", submit_dir)
 
-
+def str2bool(v):
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+        
 ############################################################
 #  Command Line
 ############################################################
@@ -444,7 +596,7 @@ if __name__ == '__main__':
     parser.add_argument("command",
                         metavar="<command>",
                         help="'train' or 'detect'")
-    parser.add_argument('--dataset', required=False,
+    parser.add_argument('--dataset', required=True,
                         metavar="/path/to/dataset/",
                         help='Root directory of the dataset')
     parser.add_argument('--weights', required=True,
@@ -463,8 +615,21 @@ if __name__ == '__main__':
     parser.add_argument('--processed_frames_dir', required=True,
                         metavar="/path/to/processed_frames_dir/",
                         help="move frames to processed frames")
+    parser.add_argument('--results_dir', required=True,
+                        metavar="/path/to/results_dir/",
+                        help="move frames to processed frames")
+    parser.add_argument('--disable_gpu', type=str2bool, required=False, 
+                        default=False,
+                        metavar="True",
+                        help="whether to use cpu only")
     args = parser.parse_args()
     
+    
+    # make gpu invisible if disable gpu
+    if args.disable_gpu == True:
+        os.environ['CUDA_VISIBLE_DEVICES'] = ''
+        
+        
     processed_frames_dir = args.processed_frames_dir
     os.makedirs(processed_frames_dir, exist_ok=True)
     # Validate arguments
@@ -480,6 +645,13 @@ if __name__ == '__main__':
     print("Logs: ", args.logs)
     
 
+    
+    
+    # restrict GPU
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    sess = tf.Session(config=config)
+    set_session(sess) 
     # Configurations
     if args.command == "train":
         config = SubtitleConfig()
@@ -521,11 +693,19 @@ if __name__ == '__main__':
     else:
         model.load_weights(weights_path, by_name=True)
 
+    
+    
+    if args.subset=='test_manual':
+        now = datetime.datetime.now()
+        results_dir = args.results_dir + f'/{now.year}-{now.month}-{now.day}-{now.hour}-{now.minute}'
+    else:
+        results_dir = args.results_dir
+        
     # Train or evaluate
     if args.command == "train":
         train(model, args.dataset, args.subset)
     elif args.command == "detect":
-        detect(model, args.dataset, args.subset, processed_frames_dir, args.input_id)
+        detect(model, args.dataset, args.subset, processed_frames_dir, args.input_id, results_dir)
     else:
         print("'{}' is not recognized. "
               "Use 'train' or 'detect'".format(args.command))
