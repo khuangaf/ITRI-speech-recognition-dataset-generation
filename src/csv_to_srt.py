@@ -72,7 +72,8 @@ def get_end_bestprediction(i, all_predictions, all_confidences):
     best_prediction = get_max_value_from_dict(prediction_confidence_dict)
     return next_i, best_prediction
 
-    
+
+# based on heuristic
 def same_subtitle(current_subtitle, next_subtitle):
     current_set = set(current_subtitle)
     next_set = set(next_subtitle)
@@ -94,7 +95,23 @@ def same_subtitle(current_subtitle, next_subtitle):
 #         return True
 #     else:
 #         return False
-        
+      
+# jaccard distance based    
+# def same_subtitle(current_subtitle, next_subtitle):
+#     current_set = set(current_subtitle)
+#     next_set = set(next_subtitle)
+#     current_set_len = len(current_set)
+#     next_set_len = len(next_set)
+#     intersect_set = current_set & next_set
+#     union_set =  current_set | next_set
+#     union_set_len = len(union_set)
+#     intersect_set_len = len(intersect_set)
+#     jaccard_distance = intersect_set_len/ union_set_len
+    
+#     if jaccard_distance > 0.3:
+#         return True
+#     else:
+#         return False
 
 def second2timecode(time):
     hours = time // 3600

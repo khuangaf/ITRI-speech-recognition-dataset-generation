@@ -144,7 +144,7 @@ def get_merge_list(prediction_boundingbox_dict, prediction_confidence_dict):
     merge_list = []
     for i in range(len(predictions) -1):
         # if both predictions are neighbor and they are of high confidence
-        if boundingbox_neighbor(prediction_boundingbox_dict[predictions[i]], prediction_boundingbox_dict[predictions[i+1]]) and prediction_confidence_dict[predictions[i]] > 0.5 and prediction_confidence_dict[predictions[i+1]] > 0.5:
+        if boundingbox_neighbor(prediction_boundingbox_dict[predictions[i]], prediction_boundingbox_dict[predictions[i+1]]):
             if len(merge_list) == 0:
                 merge_list.append(predictions[i])
                 merge_list.append(predictions[i+1])
@@ -292,27 +292,27 @@ if __name__ == '__main__':
     print(args.inputs_dir)
     parallel = Parallel(40, backend="threading", verbose=10)
     
-    for i, dir_ in enumerate(tqdm(dirs)):
+#     for i, dir_ in enumerate(tqdm(dirs)):
         
-        image_id = dir_to_id(dir_)
+#         image_id = dir_to_id(dir_)
 
-        image_fn = f'{dir_}/image.png'
-        filtered_fn = f'{dir_}/tta.png'
+#         image_fn = f'{dir_}/image.png'
+#         filtered_fn = f'{dir_}/tta.png'
         
         
-        prediction, confidence = get_best_prediction(filtered_fn)
+#         prediction, confidence = get_best_prediction(filtered_fn)
 
 
-        image_ids.append(image_id)
+#         image_ids.append(image_id)
 
-        predictions.append(prediction)
-        confidences.append(confidence)
+#         predictions.append(prediction)
+#         confidences.append(confidence)
         
-#     results = parallel(delayed(get_result)(dir_) for dir_ in dirs)
-#     for r in results:
-#         image_ids.append(r[0])
-#         predictions.append(r[1])
-#         confidences.append(r[2])
+    results = parallel(delayed(get_result)(dir_) for dir_ in dirs)
+    for r in results:
+        image_ids.append(r[0])
+        predictions.append(r[1])
+        confidences.append(r[2])
         
     image_ids, predictions, confidences
     df = pd.DataFrame(columns=['id', 'prediction', 'confidence'])

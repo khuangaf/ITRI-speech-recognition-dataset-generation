@@ -18,6 +18,7 @@ from googleapiclient.discovery import build
 import subprocess 
 from joblib import Parallel, delayed
 import argparse
+import glob
 # arguments to be passed to build function
 
 DEVELOPER_KEY = 'AIzaSyCxMsbfq_AXhzIf40L5MvaZr2KEVV0lc6s'
@@ -162,7 +163,7 @@ def main():
         for drama in dramas:
             playlist_id = get_playlist_id(drama)
             video_ids = get_video_ids(playlist_id)
-            
+            video_ids = ['Ymnux9cBUVg']
             video_threads = min(args.thread_count//2, len(video_ids))
             audio_threads = min(args.thread_count, len(video_ids))
             # use multi-thread because downloading audios sometimes can be slow

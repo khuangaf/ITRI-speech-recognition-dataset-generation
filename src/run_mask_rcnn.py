@@ -16,7 +16,6 @@ if __name__ == '__main__':
 import shutil
 import os
 # os.environ['CUDA_VISIBLE_DEVICES'] = ''
-import datetime
 import tensorflow as tf
 from tqdm import tqdm
 
@@ -99,7 +98,7 @@ class SubtitleConfig(Config):
 
     # Backbone network architecture
     # Supported values are: resnet50, resnet101
-    BACKBONE = "resnet50"
+    BACKBONE = "resnet101"
 
     # Input image resizing
     # Random crops of size 512x512
@@ -189,7 +188,6 @@ class SubtitleDataset(utils.Dataset):
         else:
             # Get image ids from directory names
             image_ids = [ fn.split('.png')[0] for fn in os.listdir(dataset_dir+'/images/')]
-#             print(image_ids)
             if subset == "train":
                 image_ids = list(set(image_ids) - set(VAL_IMAGE_IDS))
 
