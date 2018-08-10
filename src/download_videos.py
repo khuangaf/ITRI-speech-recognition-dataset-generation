@@ -40,7 +40,7 @@ def get_youtube_video_url(video_id):
     return "https://www.youtube.com/watch?v=" + video_id
 
 
-playlist_url = 'https://www.youtube.com/watch?v=5rf8Z-b22Ac&list=PLtbJJuU1O8j_uECxOs1v2RIUFfLGEadHB'
+# playlist_url = 'https://www.youtube.com/watch?v=5rf8Z-b22Ac&list=PLtbJJuU1O8j_uECxOs1v2RIUFfLGEadHB'
 
 def get_playlist_id(name):
     
@@ -54,12 +54,13 @@ def get_playlist_id(name):
 def get_video_ids(playlist_id):
     
     #search for all the videos given a playlist id
-    search_response = youtube.playlistItems().list(part='contentDetails',maxResults=1,playlistId=playlist_id).execute()
+    search_response = youtube.playlistItems().list(part='contentDetails',maxResults=50,playlistId=playlist_id).execute()
     all_videos = search_response['items']
     video_ids = []
     for vid in all_videos:
         video_id = vid['contentDetails']['videoId']
         video_ids.append(video_id)
+
     return video_ids
 
 
@@ -131,8 +132,8 @@ def extract_audio(video_id,videos_dir, audios_dir):
     #-ab 192000: we want the output to be encoded at 192Kbps 
     #-vn :we dont want video. 
 
-    cmd = f'ffmpeg -i {video_path} -f mp3 -ab 192000 -vn -y {audio_path}'
-    subprocess.call(cmd, shell=True)
+    cmd = f'ffmpeg -i {video_path} -f mp3 -ab 192000 -vn -y {audio_path}'.split(" ")
+    subprocess.call(cmd, shell=False)
     
 
 def read_drama_names(drama_file):
@@ -148,6 +149,7 @@ def main():
     parser = argparse.ArgumentParser("Script for downloading youtube video")
     parser.add_argument("--thread_count", type=int, default=50)
     parser.add_argument("--drama_file", type=str, required=True)
+    parser.add_argument("--video_id_file", type=str, required=True)
     parser.add_argument("--videos_dir", type=str, required=True)
     parser.add_argument("--audios_dir", type=str, required=True)
     args = parser.parse_args()
@@ -156,14 +158,24 @@ def main():
     os.makedirs(args.videos_dir, exist_ok=True)
     os.makedirs(args.audios_dir, exist_ok=True)
     
+    try:
+        os.remove(args.video_id_file)
+    except:
+        print("previous file does not exist")
+        
     remove_intermediate_files(args.videos_dir)
     remove_intermediate_files(args.audios_dir)
     dramas = read_drama_names(args.drama_file)
+    
     try: 
         for drama in dramas:
             playlist_id = get_playlist_id(drama)
             video_ids = get_video_ids(playlist_id)
-            video_ids = ['Ymnux9cBUVg']
+            with open(args.video_id_file, 'a') as f:
+                for vid in video_ids:
+                    f.write(f'{vid}\n')
+                    
+                continue
             video_threads = min(args.thread_count//2, len(video_ids))
             audio_threads = min(args.thread_count, len(video_ids))
             # use multi-thread because downloading audios sometimes can be slow

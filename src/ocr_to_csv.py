@@ -8,6 +8,7 @@ import re
 import cv2
 import numpy as np
 import io
+from util import *
 import pandas as pd
 
 # Imports the Google Cloud client library
@@ -22,7 +23,6 @@ import argparse
 from joblib import Parallel, delayed
 
 ENDPOINT_URL = 'https://vision.googleapis.com/v1p1beta1/images:annotate'
-
 
 os.environ['GOOGLE_APPLICATION_CREDENTIALS']='/data/ITRI-create-speech-recognition-dataset/itriaccount.json'
 # os.environ['GOOGLE_APPLICATION_CREDENTIALS']='/home/A60174/ITRI-Youtube-c9cd1c1d883d.json'
@@ -159,27 +159,61 @@ def get_merge_list(prediction_boundingbox_dict, prediction_confidence_dict):
         merge_list = [merge_list] 
     return merge_list
     
-def merge_get_confidence(merge_list, prediction_confidence_dict):
+def merge_get_confidence(merge_list, prediction_confidence_dict, prediction_boundingbox_dict):
     '''
     return the merged string and the average confidence
     '''
     average_confidence = np.mean([prediction_confidence_dict[word] for word in merge_list])
+    
+    
+    # set y value to min if they are > min_y + 0.5* font_height or
+    # set y value to max if they are < max_y - 0.5* font_height
+    
+    font_height = None
+    df = pd.DataFrame(columns=['topleft_x', 'topleft_y'])
+    for word in merge_list:
+        topleft = prediction_boundingbox_dict[word].vertices[0]
+        topleft_x = topleft.x
+        topleft_y = topleft.y
+        
+        if font_height == None:
+            bottomright = prediction_boundingbox_dict[word].vertices[2]
+            bottomright_y = bottomright.y
+            font_height = bottomright_y - topleft_y
+
+        df.loc[word] = [topleft_x, topleft_y]
+
+    min_y = df.topleft_y.min()
+    max_y  = df.topleft_y.max()
+    
+    df.loc[df.topleft_y < min_y + 0.5* font_height, "topleft_y"] = min_y
+    df.loc[df.topleft_y > max_y - 0.5* font_height, "topleft_y"] = max_y
+    
+    df.sort_values(["topleft_y", "topleft_x"], inplace=True)
+    
+    merge_list = df.index.tolist()
+    
     merged_string = ' '.join(merge_list)
     return merged_string, average_confidence
     
     
 def get_best_prediction(fn):
     
+#     print(fn)
     '''
     Send OCR request with Google Vision Client
     Input: File name
     Output: (best prediction, confidence) 
     '''
     #check if image has text
+    
     original_image = cv2.imread(fn)
-    height = original_image.shape[0]
+    try:
+        height = original_image.shape[0]
+    except:
+        print(fn)
     crop_height = int(0.7*height)
-    PIXEL_THRESHOLD = 300
+    PIXEL_THRESHOLD = 30000
     
     # if the bottom part of the image has sum of rgb value less than thresohld, return None, -1
     if original_image[crop_height:,:,:].sum() < PIXEL_THRESHOLD:
@@ -204,7 +238,7 @@ def get_best_prediction(fn):
             block_box_ratio =get_bounding_box_ratio(block.bounding_box)            
             
             # get rid of the weird text block
-            if block_box_ratio < 1 or block_box_ratio > 18: 
+            if block_box_ratio < 0.7 or block_box_ratio > 18: 
                 continue
             if bounding_box_is_peripheral(block.bounding_box, original_image):
                 continue                
@@ -220,7 +254,7 @@ def get_best_prediction(fn):
 
             for word in block_words:
                 word_box_ratio = get_bounding_box_ratio(word.bounding_box)    
-                if word_box_ratio < 1 or word_box_ratio > 18: 
+                if word_box_ratio > 18: 
                     continue
                 if bounding_box_is_peripheral(block.bounding_box, original_image):
                     continue 
@@ -231,21 +265,26 @@ def get_best_prediction(fn):
                 
                 
                 for symbol in word.symbols:
+#                     clean_text = re.sub(r"[-()\"#/@;:<>{}`+=~|.!?,]", "", symbol.text)
+                    
+                    if symbol.confidence < 0.98:
+                        return None, -3
                     word_text += symbol.text
+                    
                     
 
                 prediction_confidence_dict[word_text] = word.confidence
                 prediction_boundingbox_dict[word_text] = word.bounding_box
     
     if (len(prediction_confidence_dict)) == 0:
-        return None, 0
+        return None, -2
     
     merge_list = get_merge_list(prediction_boundingbox_dict, prediction_confidence_dict)
     if len(merge_list) == 1:
         best_prediction = merge_list[0]
         confidence = prediction_confidence_dict[best_prediction]
     else:
-        best_prediction, confidence = merge_get_confidence(merge_list, prediction_confidence_dict)
+        best_prediction, confidence = merge_get_confidence(merge_list, prediction_confidence_dict, prediction_boundingbox_dict)
           
     return  best_prediction, confidence
 
@@ -263,7 +302,7 @@ def dir_to_id(dir_):
 def get_result(dir_):
     image_id = dir_to_id(dir_)
     image_fn = f'{dir_}/image.png'
-    filtered_fn = f'{dir_}/tta.png'
+    filtered_fn = f'{dir_}/dif.png'
     prediction, confidence = get_best_prediction(filtered_fn)
     
     return image_id, prediction, confidence
@@ -273,11 +312,12 @@ if __name__ == '__main__':
     parser.add_argument("--inputs_dir", type=str, required=True)
     parser.add_argument("--results_dir", type=str, required=True)
     parser.add_argument("--results_file", type=str, required=True)
+    parser.add_argument("--video_id_file", type=str, required=True)
     args = parser.parse_args()
     
     
 
-    makedirs(args.inputs_dir, exist_ok=True)
+
     makedirs(args.results_dir, exist_ok=True)
     dirs = get_input_dirs(args.inputs_dir)
     image_ids = []
@@ -291,9 +331,10 @@ if __name__ == '__main__':
 #     remove_intermediate_files(args.inputs_dir)
     print(args.inputs_dir)
     parallel = Parallel(40, backend="threading", verbose=10)
-    
+
 #     for i, dir_ in enumerate(tqdm(dirs)):
         
+#         if i not in range(760,770): continue
 #         image_id = dir_to_id(dir_)
 
 #         image_fn = f'{dir_}/image.png'

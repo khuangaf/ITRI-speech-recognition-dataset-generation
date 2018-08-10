@@ -18,7 +18,7 @@ import os
 # os.environ['CUDA_VISIBLE_DEVICES'] = ''
 import tensorflow as tf
 from tqdm import tqdm
-
+from util import *
 
 from keras.backend.tensorflow_backend import set_session
 
@@ -360,7 +360,10 @@ def detect(model, dataset_dir, subset, processed_frames_dir, input_id, results_d
 
 
                 height, width, _ = image.shape
-    #             crop_height = int(0.6*height)
+                # keep only the bottom 40%
+#                 crop_height = int(0.6*height)
+#                 image = image[crop_height:,:,:]
+#                 height, width, _ = image.shape
 
                 #resize for faster process and higher accuracy
                 if width >= 1000 or height >= 700:
@@ -473,12 +476,13 @@ def detect(model, dataset_dir, subset, processed_frames_dir, input_id, results_d
         for image_id in tqdm(dataset.image_ids):
             # Load image and run detection
             image = dataset.load_image(image_id)
+            
 
 
             height, width, _ = image.shape
-#             crop_height = int(0.6*height)
-
-
+            crop_height = int(0.6*height)
+            image = image[crop_height:,:]
+            height, width, _ = image.shape
 
             #resize for faster process and higher accuracy
             if width >= 1000 or height >= 700:
@@ -620,6 +624,8 @@ if __name__ == '__main__':
                         default=False,
                         metavar="True",
                         help="whether to use cpu only")
+    parser.add_argument("--video_id_file", type=str, required=True)
+    
     args = parser.parse_args()
     
     
@@ -689,8 +695,9 @@ if __name__ == '__main__':
             "mrcnn_class_logits", "mrcnn_bbox_fc",
             "mrcnn_bbox", "mrcnn_mask"])
     else:
-        model.load_weights(weights_path, by_name=True)
-
+        
+        models = [model.load_weights('Mask_RCNN/logs/subtitle20180731T0943/mask_rcnn_subtitle_0091.h5', by_name=True), 
+                 model.load_weights('Mask_RCNN/logs/subtitle20180806T1527/mask_rcnn_subtitle_0089.h5', by_name=True)]
     
     
     if args.subset=='test_manual':
@@ -703,7 +710,12 @@ if __name__ == '__main__':
     if args.command == "train":
         train(model, args.dataset, args.subset)
     elif args.command == "detect":
-        detect(model, args.dataset, args.subset, processed_frames_dir, args.input_id, results_dir)
+        if args.input_id:
+            detect(model, args.dataset, args.subset, processed_frames_dir, args.input_id, results_dir)
+        else:
+            input_ids = get_video_id_from_file(args.video_id_file)
+            for input_id in input_ids:
+                detect(model, args.dataset, args.subset, processed_frames_dir, input_id, results_dir)
     else:
         print("'{}' is not recognized. "
               "Use 'train' or 'detect'".format(args.command))

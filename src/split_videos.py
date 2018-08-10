@@ -5,7 +5,7 @@ import argparse
 import os
 import shutil
 import multiprocessing
-
+from util import *
 def video2frames(video_id, video_path, processed_videos_dir, frame_path, sample_rate):
     #concat path and video id
     path_video = video_path + video_id + '.mp4'
@@ -14,13 +14,14 @@ def video2frames(video_id, video_path, processed_videos_dir, frame_path, sample_
     # split only the main part of the video
     starting_time = 0.2 * video_duration
     split_duration = 0.6 * video_duration
+    
     try:
         #-loglevel panic: slience
         #-hwaccel vdpau: hardware acceleration with GPU
         # -ss starting time
         # -t duration
-        cmd = f'ffmpeg -ss {starting_time} -t {split_duration} -i {path_video} -r {sample_rate} {frame_path}/{video_id}-%07d-{sample_rate}.png'
-        subprocess.call(cmd, shell=True)
+        cmd = f'ffmpeg -ss {starting_time} -t {split_duration} -i {path_video} -r {sample_rate} {frame_path}/{video_id}-%07d-{sample_rate}.png'.split(" ")
+        subprocess.call(cmd, shell=False)
     
     except Exception as e:
         print(f'Failed to cut videos {video_id}: {e}')
@@ -37,6 +38,8 @@ def gather_video_ids(video_path):
     video_ids = [ path2id(f) for f in os.listdir(f'{video_path}/') if '.mp4' in f]
     return video_ids
 
+
+
 def main():
     parser = argparse.ArgumentParser("Script for splitting youtube videos")
     parser.add_argument("--thread_count", type=int)
@@ -44,6 +47,7 @@ def main():
     parser.add_argument("--processed_videos_dir", type=str, required=True)
     parser.add_argument("--frames_dir", type=str, required=True)
     parser.add_argument("--sample_rate", type=float, required=True)
+    parser.add_argument("--video_id_file", type=str, required=True)
     
     args = parser.parse_args()
     
@@ -55,7 +59,8 @@ def main():
     # parallel processing to increase speed
     parallel = Parallel(thread_count, backend="threading", verbose=0)
     
-    video_ids = gather_video_ids(args.videos_dir)
+#     video_ids = gather_video_ids(args.videos_dir)
+    video_ids = get_video_id_from_file(args.video_id_file)
     
     try: 
         #split video into frames

@@ -7,6 +7,7 @@ from tqdm import tqdm
 import argparse
 import operator
 import editdistance
+from util import *
 
 def get_duration(path_video):
     # return the duration of path_video in second
@@ -27,6 +28,20 @@ def get_time(id, sample_rate, start_time):
 def get_max_value_from_dict(d):
     return max(d.items(), key=operator.itemgetter(1))[0]
 
+def get_max_value_from_df(pred_conf_df):
+    
+    
+    max_confidence = pred_conf_df.confidence.max()
+    
+    max_df = pred_conf_df.loc[pred_conf_df.confidence == max_confidence]
+    
+     
+    # highest voting prediction
+    result = max_df.prediction.value_counts(ascending=False).index[0]
+    return result
+    
+    
+
 def get_end_bestprediction(i, all_predictions, all_confidences):
     
     '''
@@ -38,13 +53,15 @@ def get_end_bestprediction(i, all_predictions, all_confidences):
         ending index and best prediction with highest confidence
     '''
     # map prediction to highest confidence
-    prediction_confidence_dict = {}
+#     prediction_confidence_dict = {}
     
     current_subtitle = all_predictions[i]
     current_confidence = all_confidences[i]
     
-    prediction_confidence_dict[current_subtitle] = current_confidence
+#     prediction_confidence_dict[current_subtitle] = current_confidence
+    pred_conf_df = pd.DataFrame(columns=['prediction', 'confidence'])
     
+    pred_conf_df.loc[0] = [current_subtitle, current_confidence]
     if i+1 >= len(all_predictions):
         next_i = i
         best_prediction = current_subtitle
@@ -58,18 +75,21 @@ def get_end_bestprediction(i, all_predictions, all_confidences):
     while same_subtitle(current_subtitle, next_subtitle):
 
         # update best confidence if it is higher than the original one in the dictionary
-        if next_subtitle in prediction_confidence_dict and next_confidence > prediction_confidence_dict[next_subtitle]:
-            prediction_confidence_dict[next_subtitle] = next_confidence
-        elif next_subtitle not in prediction_confidence_dict:
-            prediction_confidence_dict[next_subtitle] = next_confidence
+#         if next_subtitle in prediction_confidence_dict and next_confidence > prediction_confidence_dict[next_subtitle]:
+#             prediction_confidence_dict[next_subtitle] = next_confidence
+#         elif next_subtitle not in prediction_confidence_dict:
+#             prediction_confidence_dict[next_subtitle] = next_confidence
             
+        pred_conf_df.loc[next_i] = [current_subtitle, current_confidence]
+        
         next_i += 1
         if next_i >= len(all_predictions):
             break
         next_subtitle = all_predictions[next_i]
         next_confidence = all_confidences[next_i]
     next_i -= 1
-    best_prediction = get_max_value_from_dict(prediction_confidence_dict)
+#     best_prediction = get_max_value_from_dict(prediction_confidence_dict)
+    best_prediction = get_max_value_from_df(pred_conf_df)
     return next_i, best_prediction
 
 
@@ -130,7 +150,7 @@ def main():
     parser.add_argument("--csvs_dir", type=str, required=True)
     parser.add_argument("--videos_dir", type=str, required=True)
     parser.add_argument("--input_csv", type=str, required=False)
-    
+    parser.add_argument("--video_id_file", type=str, required=True)
     args = parser.parse_args()
     
     srts_dir = args.srts_dir
