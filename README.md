@@ -8,6 +8,8 @@ Although there exists an abundance of English speech recognition datasets public
 
 ## Requirements
 
+First, [install FFMPEG from its website](https://github.com/adaptlearning/adapt_authoring/wiki/Installing-FFmpeg)
+
 * Python==3.6
 * joblib==0.12.0
 * numpy==1.13.3
@@ -17,6 +19,8 @@ Although there exists an abundance of English speech recognition datasets public
 * google-cloud-vision==0.32.0
 * pafy==0.5.4
 * youtube-dl==2017.12.2
+* tqdm==4.23.4
+* editdistance==0.4
 
 To set up all the requirements, prepare a python 3.6 environment with conda and install packages with pip.
 

@@ -1,3 +1,8 @@
+"""
+This script aggregates the results from Google OCR API, and output SRT.
+
+Author: Kung-hsiang, Huang, 2018
+"""
 import numpy as np
 import pandas as pd
 import glob
@@ -10,26 +15,71 @@ import editdistance
 from util import *
 
 def get_duration(path_video):
-    # return the duration of path_video in second
+    '''
+    Return the duration of path_video in seconds.
+    
+    Parameters
+    ----------
+    path_video : str 
+        The path of the video 
+        e.g.
+            path/to/video/abc.mp4
+    Returns
+    --------
+    float
+        The length of the video in seconds.
+    
+    '''
     cmd = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 {path_video}'
     return float(subprocess.Popen(cmd.split(), stdout=subprocess.PIPE).communicate()[0].strip())
 
 def get_sample_rate(frame_id):
+    '''
+    Return the sample rate from id
+    e.g.
+        qebmksd-000356-2.0 --> 2.0
+    
+    '''
     return float(frame_id.split('-')[-1])
     
-def get_all_inputs(dir):
-    return [fn for fn in os.listdir(dir) if 'csv' in fn]
-    
 def get_time(id, sample_rate, start_time):
+    '''
+    Return the time in the video with regard to the start time in seconds
+
+    Parameters
+    ----------
+    id: str
+        e.g.
+            qebmksd-000356-2.0
+    sample_rate: float
+        Sample rate of the current video
+    
+    start_time: int
+        Start time of the current video
+        
+    Returns
+    --------
+    float
+        The converted time in seconds.
+    
+    '''
+    # e.g. qebmksd-000356-2.0 --> 356
     sample_index = int(id.split('-')[-2])
 
     return sample_index / sample_rate + start_time
 
 def get_max_value_from_dict(d):
+    '''
+    Return the key in a dictionary with the maximum value
+    
+    '''
     return max(d.items(), key=operator.itemgetter(1))[0]
 
 def get_max_value_from_df(pred_conf_df):
+    '''
+    Return the key in a dataframe with the maximum confidence value
     
+    '''
     
     max_confidence = pred_conf_df.confidence.max()
     
@@ -45,20 +95,34 @@ def get_max_value_from_df(pred_conf_df):
 def get_end_bestprediction(i, all_predictions, all_confidences):
     
     '''
-    input:
-        i: starting index
-
-    output: 
-        next_i,
-        ending index and best prediction with highest confidence
+    This function starts searching from index i in all predictions. 
+    Loop over the predictions until it reachs a prediction that is not the the same subtitle.
+    Return the ending index so that the current subtitle corresponds to the time range (start_i, end_i).
+    Parameters
+    ----------
+    i: int
+        The starting index for a given subtitle.
+        
+    all_predictions: list(str)
+        A list of text containing all predicted subtitles. (The 'prediction' column of the csv)
+    
+    all_confidences: list(float)
+        A list of float containing all predicted confidences. (The 'confidence' column of the csv)
+        
+    Returns
+    --------
+    next_i: int
+        The ending index for a given subtitle.
+    
+    best_prediction: str
+        Since the subtitles cover with this starting and ending index can be different a little, we decide which one to represents
     '''
-    # map prediction to highest confidence
-#     prediction_confidence_dict = {}
+    
     
     current_subtitle = all_predictions[i]
     current_confidence = all_confidences[i]
     
-#     prediction_confidence_dict[current_subtitle] = current_confidence
+
     pred_conf_df = pd.DataFrame(columns=['prediction', 'confidence'])
     
     pred_conf_df.loc[0] = [current_subtitle, current_confidence]
@@ -70,15 +134,8 @@ def get_end_bestprediction(i, all_predictions, all_confidences):
     next_i = i+1
     next_subtitle = all_predictions[next_i]
     next_confidence = all_confidences[next_i]
-#     print(f"current {current_subtitle.encode('utf-8')}")
-#     print([p.encode('utf-8')  for p in all_predictions[30:]])
-    while same_subtitle(current_subtitle, next_subtitle):
 
-        # update best confidence if it is higher than the original one in the dictionary
-#         if next_subtitle in prediction_confidence_dict and next_confidence > prediction_confidence_dict[next_subtitle]:
-#             prediction_confidence_dict[next_subtitle] = next_confidence
-#         elif next_subtitle not in prediction_confidence_dict:
-#             prediction_confidence_dict[next_subtitle] = next_confidence
+    while same_subtitle(current_subtitle, next_subtitle):
             
         pred_conf_df.loc[next_i] = [current_subtitle, current_confidence]
         
@@ -88,13 +145,15 @@ def get_end_bestprediction(i, all_predictions, all_confidences):
         next_subtitle = all_predictions[next_i]
         next_confidence = all_confidences[next_i]
     next_i -= 1
-#     best_prediction = get_max_value_from_dict(prediction_confidence_dict)
+
     best_prediction = get_max_value_from_df(pred_conf_df)
     return next_i, best_prediction
 
 
 # based on heuristic
 def same_subtitle(current_subtitle, next_subtitle):
+    '''Return true if the two given subtitles are the same (but can tolerate a bit difference)'''
+    # convert the two subtitle into set e.g. '我很乖' -> {'我','很','乖'}
     current_set = set(current_subtitle)
     next_set = set(next_subtitle)
     current_set_len = len(current_set)
@@ -102,38 +161,14 @@ def same_subtitle(current_subtitle, next_subtitle):
     intersect_set = current_set & next_set
     intersect_set_len = len(intersect_set)
     
-
+    # if any of the two subtitle are of 70% the same with the intersected set return True
     if intersect_set_len >= 0.7 * current_set_len or intersect_set_len >= 0.7 * next_set_len:
         return True
     else:
         return False
 
-# edit distance based
-# def same_subtitle(current_subtitle, next_subtitle):
-#     score = editdistance.eval(current_subtitle,next_subtitle)
-#     if score < max(len(current_subtitle), len(next_subtitle)) * 0.5:
-#         return True
-#     else:
-#         return False
-      
-# jaccard distance based    
-# def same_subtitle(current_subtitle, next_subtitle):
-#     current_set = set(current_subtitle)
-#     next_set = set(next_subtitle)
-#     current_set_len = len(current_set)
-#     next_set_len = len(next_set)
-#     intersect_set = current_set & next_set
-#     union_set =  current_set | next_set
-#     union_set_len = len(union_set)
-#     intersect_set_len = len(intersect_set)
-#     jaccard_distance = intersect_set_len/ union_set_len
-    
-#     if jaccard_distance > 0.3:
-#         return True
-#     else:
-#         return False
-
 def second2timecode(time):
+    '''Convert second into time code for srt.'''
     hours = time // 3600
     time -= 3600 * hours
     minutes = time // 60
@@ -145,7 +180,6 @@ def second2timecode(time):
 
 def main():
     parser = argparse.ArgumentParser("Script for processing csv to srt")
-    parser.add_argument("--thread_count", type=int, default=3)
     parser.add_argument("--srts_dir", type=str, required=True)
     parser.add_argument("--csvs_dir", type=str, required=True)
     parser.add_argument("--videos_dir", type=str, required=True)
@@ -158,10 +192,12 @@ def main():
     videos_dir = args.videos_dir
     input_csv = args.input_csv
     os.makedirs(args.srts_dir, exist_ok=True)
+    
     if input_csv != None:
         video_csvs = [input_csv]
     else:
-        video_csvs = get_all_inputs(csvs_dir)
+        video_ids = get_video_id_from_file(args.video_id_file)
+        video_csvs = [vid+".csv" for vid in video_ids]
     
     for video_csv in tqdm(video_csvs):
         
@@ -177,21 +213,23 @@ def main():
         duration = get_duration(path_video)
         
         current_subtitle= None
-        # seconds per frame
         
+        
+        # seconds per frame        
         spf = 1.0 / sample_rate
         
         # records the cut-off of the video
         video_start_time = 0.2 * duration  - spf*2
         subtitle_start_time = video_start_time
         
-        # get only subtitles with confidence > 0.7
+        # get only subtitles with confidence > 0.98
         df = df.loc[df.confidence >= 0.98, :]
         
         # a string that gathers subtitles for srt output
         subtitles = ''
         subtitle_count = 1
         
+        # get the confidences and predictions from dataframe
         all_predictions = df.prediction.values
         all_confidences = df.confidence.values
         all_frame_indexes = df.id.values
@@ -199,6 +237,7 @@ def main():
         start_i = 0
         while start_i < len((all_predictions)):
 
+            # get the end_index given a subtitle of the start_index
             end_i, current_subtitle = get_end_bestprediction(start_i, all_predictions, all_confidences)
         
             end_frame_index = all_frame_indexes[end_i]
@@ -210,6 +249,8 @@ def main():
             subtitles += f'{subtitle_count}\n'
             subtitles += second2timecode(subtitle_start_time) + ' --> ' + second2timecode(subtitle_end_time) + '\n'
             subtitles += current_subtitle + '\n\n'
+            
+            # let start_index = previous end_index + 1
             start_i = end_i +1
             subtitle_count += 1
 
