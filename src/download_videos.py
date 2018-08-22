@@ -22,7 +22,7 @@ import glob
 
 
 # developer keys for Youtube V3 API
-DEVELOPER_KEY = 'AIzaSyCxMsbfq_AXhzIf40L5MvaZr2KEVV0lc6s'
+DEVELOPER_KEY = 'YOUR_API_KEY'
 YOUTUBE_API_SERVICE_NAME = "youtube"
 YOUTUBE_API_VERSION = "v3"
 
