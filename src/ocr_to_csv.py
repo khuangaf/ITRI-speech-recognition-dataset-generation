@@ -318,6 +318,7 @@ def get_best_prediction(fn):
         print("get_best_prediction error: {fn}")
         return None, -1
     
+    is_character_filtered = False
     
     
     # if below this threshold, view it as an black image with no subtitle
@@ -373,7 +374,7 @@ def get_best_prediction(fn):
                 for symbol in word.symbols:
                     
                     if symbol.confidence < 0.98:
-                        return None, -3
+                        is_character_filtered = True
                     word_text += symbol.text
                     
                     
@@ -391,8 +392,11 @@ def get_best_prediction(fn):
         confidence = prediction_confidence_dict[best_prediction]
     else:
         best_prediction, confidence = merge_get_confidence(merge_list, prediction_confidence_dict, prediction_boundingbox_dict)
-          
-    return  best_prediction, confidence
+    
+    if is_character_filtered:
+        return best_prediction, -3
+    else:
+        return best_prediction, confidence
 
 def get_input_dirs(dir_):
     '''return a list of frame names'''
