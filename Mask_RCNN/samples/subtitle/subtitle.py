@@ -13,16 +13,11 @@ Usage: import the module (see Jupyter notebooks for examples), or run from
        the command line as such:
 
     # Train a new model starting from ImageNet weights
-    python3 nucleus.py train --dataset=/path/to/dataset --subset=train --weights=imagenet
+    python subtitle.py train --dataset=/path/to/dataset --subset=train --weights=imagenet
 
     # Train a new model starting from specific weights file
-    python3 nucleus.py train --dataset=/path/to/dataset --subset=train --weights=/path/to/weights.h5
+    python subtitle.py train --dataset=/path/to/dataset --subset=train --weights=/path/to/weights.h5
 
-    # Resume training a model that you had trained earlier
-    python3 nucleus.py train --dataset=/path/to/dataset --subset=train --weights=last
-
-    # Generate submission file
-    python3 nucleus.py detect --dataset=/path/to/dataset --subset=train --weights=<last or /path/to/weights.h5>
 """
 
 # Set matplotlib backend
@@ -91,8 +86,7 @@ def get_all_id(dir_):
 # Save submission files here
 RESULTS_DIR = '/data/ITRI-create-speech-recognition-dataset/mandarin/maskrcnn_results/'
 
-# The dataset doesn't have a standard train/val split, so I picked
-# a variety of images to surve as a validation set.
+#Be sure to run the Dataset Generation Mask-RCNN.ipynb file to generate these two
 with open('/data/steeve/mask_rcnn/data/split/valid_ids', 'r') as f:
     VAL_IMAGE_IDS = [id.strip() for id in f.readlines()]
 
@@ -219,7 +213,7 @@ class SubtitleDataset(utils.Dataset):
         else:
             # Get image ids from directory names
             image_ids = [ fn.split('.png')[0] for fn in os.listdir(dataset_dir+'/images/')]
-#             print(image_ids)
+
             if subset == "train":
                 image_ids = list(set(image_ids) - set(VAL_IMAGE_IDS))
 
@@ -250,14 +244,10 @@ class SubtitleDataset(utils.Dataset):
         id_ = info['id']
         # Get mask directory from image path
         mask_path = os.path.join( f"{self.dataset_dir}/multi_masks/{id_}.npy")
-#         print(mask_path)
-#         print(image_id)
+
         # Read mask files from .png image
         mask = []
-#         for f in next(os.walk(mask_dir))[2]:
-#             if f.endswith(".png"):
-#                 m = skimage.io.imread(os.path.join(mask_dir, f)).astype(np.bool)
-#                 mask.append(m)
+
         multi_masks = np.load(mask_path)
         num_masks = multi_masks.max()
 

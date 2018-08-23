@@ -105,6 +105,17 @@ __Dataset Generation Mask-RCNN .ipynb__ : Jupyter notebook for generating Mask-R
 
 ## Usage 
 
+To train Mask-RCNN, 
+
+Perpare several true-type fonts, and images split from videos downloaded. Run __Dataset Generation Mask-RCNN .ipynb__, then run __subtitle.py__ under __Mask_RCNN/samples/subtitle__ .
+
+```
+python subtitle.py train --dataset=/path/to/dataset --subset=train --weights=coco
+```
+
+
+To automatically run the 
+
 ```
 bash automatic_script.sh
 
