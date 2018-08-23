@@ -13,7 +13,7 @@ Usage: import the module (see Jupyter notebooks for examples), or run from
        the command line as such:
 
     # Train a new model starting from ImageNet weights
-    python subtitle.py train --dataset=/path/to/dataset --subset=train --weights=imagenet
+    python subtitle.py train --dataset=/path/to/dataset --subset=train --weights=coco
 
     # Train a new model starting from specific weights file
     python subtitle.py train --dataset=/path/to/dataset --subset=train --weights=/path/to/weights.h5
