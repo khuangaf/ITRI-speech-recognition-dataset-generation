@@ -2,7 +2,7 @@
 
 __Author: Kung-hsiang, Huang (Steeve), 2018__
 
-Although there exists an abundance of English speech recognition datasets publicly available, the opposite is true for the Mandarin ones, espically for Mandarin datasets that contain a little Taiwanese or English speaking. We want to leverage the copiousness of the Taiwanese dramas uploaded to Youtube to collect Speech Recognition dataset. The pipeline is shown as the following figure:
+Although there exists an abundance of English speech recognition datasets publicly available, the opposite is true for the Mandarin ones, espically for Mandarin datasets that contain some Taiwanese or English speech. We want to leverage the copiousness of the Taiwanese dramas uploaded to Youtube to collect Speech Recognition dataset. The pipeline is shown as the following figure:
 
 ![Pipeline](/docs/DataCollectionPipeline.png)
 
